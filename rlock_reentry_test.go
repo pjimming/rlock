@@ -1,10 +1,11 @@
 package rlock
 
 import (
-	"github.com/stretchr/testify/assert"
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var reentryParam = Param{
