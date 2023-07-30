@@ -1,4 +1,4 @@
-package RedisLock
+package rlock
 
 import (
 	"log"

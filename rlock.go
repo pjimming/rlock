@@ -1,4 +1,4 @@
-package RedisLock
+package rlock
 
 import (
 	"github.com/go-redis/redis/v8"
