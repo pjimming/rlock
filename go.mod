@@ -1,4 +1,4 @@
-module RedisLock
+module github.com/pjimming/rlock
 
 go 1.18
 
