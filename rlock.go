@@ -2,7 +2,13 @@ package rlock
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"time"
+
+	"github.com/pjimming/rlock/common"
+	"github.com/pjimming/rlock/logx"
+	"github.com/pjimming/rlock/mistake"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -17,9 +23,11 @@ type RLock struct {
 	runningDog int32
 	// stop watchdog
 	stopDog context.CancelFunc
+
+	logger *logx.Logger
 }
 
-func NewRLock(op SingleClientOptions) (rLock *RLock) {
+func NewRLock(op RedisClientOptions) (rLock *RLock) {
 	once.Do(func() {
 		rc = redis.NewClient(&redis.Options{
 			Addr:     op.Addr,
@@ -48,28 +56,152 @@ func NewRLock(op SingleClientOptions) (rLock *RLock) {
 	})
 
 	if err := rc.Ping(rc.Context()).Err(); err != nil {
-		dlog.Errorf("redis client ping fail, %v", err)
+		log.Printf("redis client ping fail, error: %v", err)
 		return nil
 	}
 
 	rLock = &RLock{
-		key:         "",
-		token:       generateToken(),
-		client:      rc,
-		lockOptions: lockOptions{},
-		runningDog:  0,
-		stopDog:     nil,
+		key:    "",
+		token:  generateToken(),
+		client: rc,
+		lockOptions: lockOptions{
+			isReentry:          false,
+			blockWaitingSecond: 60,
+			expireSeconds:      30,
+			watchdogSwitch:     false,
+		},
+		runningDog: 0,
+		stopDog:    nil,
+		logger:     logx.NewLogger(),
 	}
 
 	return
 }
 
-//func (l *RLock) Lock() error {
-//}
-//
-//func (l *RLock) tryLock() error {
-//	if l.IsReentry() {
-//		l.client.Eval(l.client.Context())
-//	}
-//	return l.client.Eval(l.client.Context(), l.key, l.token, time.Duration(l.expireSeconds)*time.Second).Err()
-//}
+func (l *RLock) Lock() (err error) {
+	if err = l.tryLock(); err == nil {
+		return nil
+	}
+
+	if err != mistake.ErrLockAcquiredByOthers() {
+		l.logger.Errorf("lock fail, error: %v", err)
+		return err
+	}
+
+	// span
+	if err = l.span(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *RLock) TryLock() bool {
+	err := l.tryLock()
+	if err == nil {
+		return true
+	}
+
+	if err != mistake.ErrLockAcquiredByOthers() {
+		l.logger.Errorf("TryLock error: %v", err)
+	}
+	return false
+}
+
+func (l *RLock) tryLock() (err error) {
+	var res interface{}
+	if l.IsReentry() {
+		if res, err = l.client.
+			Eval(l.client.Context(), common.ReentryLockLua, []string{l.key}, l.token, l.expireSeconds).
+			Result(); err != nil {
+			return err
+		}
+	} else {
+		// not reentry
+		if res, err = l.client.
+			Eval(l.client.Context(), common.LockLua, []string{l.key}, l.token, l.expireSeconds).
+			Result(); err != nil {
+			return err
+		}
+	}
+
+	if res != int64(1) {
+		err = mistake.ErrLockAcquiredByOthers()
+	}
+	return err
+}
+
+func (l *RLock) span() (err error) {
+	timeoutCh := time.After(time.Duration(l.blockWaitingSecond) * time.Second)
+	ticker := time.NewTicker(time.Duration(50) * time.Millisecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		select {
+		case <-l.client.Context().Done():
+			return fmt.Errorf("span fail, ctx timeout, error: %v", l.client.Context().Err())
+		case <-timeoutCh:
+			return mistake.ErrLockAcquiredByOthers()
+		default:
+		}
+
+		if err = l.tryLock(); err == nil {
+			return nil
+		} else if err != mistake.ErrLockAcquiredByOthers() {
+			return err
+		}
+	}
+
+	// will never reach
+	return nil
+}
+
+func (l *RLock) Key() string {
+	return l.key
+}
+
+func (l *RLock) SetKey(key string) {
+	l.key = key
+}
+
+func (l *RLock) Token() string {
+	return l.token
+}
+
+func (l *RLock) SetToken(token string) {
+	l.token = token
+}
+
+func (l *RLock) IsReentry() bool {
+	return l.isReentry
+}
+
+func (l *RLock) SetIsReentry(isReentry bool) {
+	l.isReentry = isReentry
+}
+
+func (l *RLock) BlockWaitingSecond() int64 {
+	return l.blockWaitingSecond
+}
+
+func (l *RLock) SetBlockWaitingSecond(blockWaitingSecond int64) {
+	if blockWaitingSecond < 0 {
+		blockWaitingSecond = 1<<63 - 1
+	}
+	l.blockWaitingSecond = blockWaitingSecond
+}
+
+func (l *RLock) ExpireSeconds() int64 {
+	return l.expireSeconds
+}
+
+func (l *RLock) SetExpireSeconds(expireSeconds int64) {
+	l.expireSeconds = expireSeconds
+}
+
+func (l *RLock) WatchdogSwitch() bool {
+	return l.watchdogSwitch
+}
+
+func (l *RLock) SetWatchdogSwitch(watchdogSwitch bool) {
+	l.watchdogSwitch = watchdogSwitch
+}

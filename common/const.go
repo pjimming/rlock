@@ -1,16 +1,28 @@
-package rlock
+package common
+
+const (
+	ErrLockAcquiredByOthersStr = "lock acquire by others"
+)
 
 // Lua Scripts
 const (
-	commonLockLua = `
-local lockKey = KEYS[1]
-local lockToken = ARGV[1]
-local expireTime = tonumber(ARGV[2])
-
-SET KEYS[1] ARGV[1] NX EX expireTime 
+	LockLua = `
+if redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", tonumber(ARGV[2])) then
+	return 1
+else
+	return 0
+end
 `
 
-	reentryLockLua = `
+	UnLockLua = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+else 
+	return 0
+end
+`
+
+	ReentryLockLua = `
 local lockKey = KEYS[1]
 local lockToken = ARGV[1]
 local lockTimeout = tonumber(ARGV[2])
@@ -29,7 +41,7 @@ else
 	return 0
 end
 `
-	reentryUnlockLua = `
+	ReentryUnlockLua = `
 local lockKey = KEYS[1]
 local lockToken = ARGV[1]
 
@@ -55,5 +67,5 @@ else
 end
 `
 
-	expireLua = ``
+	UpdateExpireLua = ``
 )

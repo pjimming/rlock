@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var op = rlock.SingleClientOptions{
+var op = rlock.RedisClientOptions{
 	Addr:     "127.0.0.1:6379",
 	Password: "",
 }
