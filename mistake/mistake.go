@@ -3,9 +3,9 @@ package mistake
 import (
 	"errors"
 
-	"github.com/pjimming/rlock/common"
+	"github.com/pjimming/rlock/constants"
 )
 
 func ErrLockAcquiredByOthers() error {
-	return errors.New(common.ErrLockAcquiredByOthersStr)
+	return errors.New(constants.ErrLockAcquiredByOthersStr)
 }

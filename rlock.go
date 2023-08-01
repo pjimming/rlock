@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pjimming/rlock/common"
+	"github.com/pjimming/rlock/constants"
 	"github.com/pjimming/rlock/logx"
 	"github.com/pjimming/rlock/mistake"
 	"github.com/pjimming/rlock/utils"
@@ -129,14 +129,14 @@ func (l *RLock) tryLock() (err error) {
 	var res interface{}
 	if l.IsReentry() {
 		if res, err = l.client.
-			Eval(l.client.Context(), common.ReentryLockLua, []string{l.key}, l.token, l.expireSeconds).
+			Eval(l.client.Context(), constants.ReentryLockLua, []string{l.key}, l.token, l.expireSeconds).
 			Result(); err != nil {
 			return err
 		}
 	} else {
 		// not reentry
 		if res, err = l.client.
-			Eval(l.client.Context(), common.LockLua, []string{l.key}, l.token, l.expireSeconds).
+			Eval(l.client.Context(), constants.LockLua, []string{l.key}, l.token, l.expireSeconds).
 			Result(); err != nil {
 			return err
 		}
