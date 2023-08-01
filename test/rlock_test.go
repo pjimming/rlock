@@ -1,11 +1,11 @@
 package test
 
 import (
-	"github.com/pjimming/rlock/utils"
 	"testing"
 	"time"
 
 	"github.com/pjimming/rlock"
+	"github.com/pjimming/rlock/utils"
 
 	"github.com/stretchr/testify/assert"
 )
