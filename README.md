@@ -2,7 +2,7 @@
 
 A distributed redis lock based by Golang.
 
-- [简体中文]()
+- [简体中文](./README_ZH.md)
 
 ---
 
