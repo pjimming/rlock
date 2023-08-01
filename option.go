@@ -1,14 +1,12 @@
 package rlock
 
 type RedisClientOptions struct {
-	// redis address
-	Addr string
-	// redis password
-	Password string
+	Addr     string // redis address
+	Password string // redis password
 }
 
 type lockOptions struct {
-	blockWaitingSecond int64
-	expireSeconds      int64
-	watchdogSwitch     bool
+	blockWaitingSecond int64 // blocking timeout time
+	expireSeconds      int64 // key expire time
+	watchdogSwitch     bool  // watchdog on/off
 }

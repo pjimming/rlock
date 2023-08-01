@@ -20,19 +20,19 @@ var (
 )
 
 type RLock struct {
-	key    string
-	token  string
-	client *redis.Client
+	key    string        // lock key
+	token  string        // lock token, to authority validate
+	client *redis.Client // redis client pool
 	lockOptions
 
-	// watchdog is running ?
-	runningDog int32
-	// stop watchdog
-	stopDog context.CancelFunc
+	runningDog int32              // watchdog running status
+	stopDog    context.CancelFunc // stop watchdog
 
-	logger *logx.Logger
+	logger *logx.Logger // log
 }
 
+// NewRLock new a redis lock.
+// You can set params with set function.
 func NewRLock(op RedisClientOptions, key string) (rLock *RLock) {
 	if key == "" {
 		key = utils.GenerateRandomString(10)
@@ -197,6 +197,10 @@ func (l *RLock) span() (ttl interface{}, err error) {
 	return -1, nil
 }
 
+// releaseLock try to release lock.
+// If res == 0, it means release lock successfully, but still hold lock.
+// If res == 1, it means release lock absolutely.
+// If res == -1, it means release other's lock or error.
 func (l *RLock) releaseLock() (res interface{}, err error) {
 	if res, err = l.client.
 		Eval(l.client.Context(), constants.UnLockLua, []string{l.key}, l.token, l.expireSeconds).

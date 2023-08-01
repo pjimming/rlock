@@ -1,5 +1,11 @@
 # RLock
 
+A distributed redis lock based by Golang.
+
+- [简体中文]()
+
+---
+
 ## Status
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -8,14 +14,49 @@
 go get -u github.com/pjimming/rlock
 ```
 
-## [Lua Scripts](./lua.md)
+## Achieve
+- Mutual exclusion: Redis distributed lock can ensure that only one client can acquire the lock at the same time, realizing mutual exclusion between threads.
+- Security: Redis distributed locks use atomic operations, which can ensure the security of locks under concurrent conditions and avoid problems such as data competition and deadlocks.
+- Lock timeout: In order to avoid deadlock caused by a failure of a certain client after acquiring the lock, the Redis distributed lock can set the lock timeout period, and the lock will be released automatically when the timeout is exceeded.
+- Reentrancy: Redis distributed locks can support the same client to acquire the same lock multiple times, avoiding deadlocks in nested calls.
+- High performance: Redis is an in-memory database with high read and write performance, enabling fast locking and unlocking operations.
+- Atomicity: The locking and unlocking operations of Redis distributed locks use atomic commands, which can ensure the atomicity of operations and avoid competition problems under concurrency.
+
+## Lua Scripts
 > Hint: Your redis should support lua script.
 
-## RLock Type
-### [Distributed RLock](./rlock_distributed.go)
-Redis distributed lock is a mechanism for implementing concurrency control in distributed systems. It is based on Redis, a high-performance in-memory database, and uses its single-threaded, atomic operations, and fast network access features to ensure data consistency and thread safety when multiple clients access shared resources at the same time.
+### LockLua
+```lua
+if (redis.call('EXISTS', KEYS[1]) == 0) then
+    -- don't have lock
+    redis.call('HINCRBY', KEYS[1], ARGV[1], 1)
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    return 0
+end
+if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1) then
+    -- reentry
+    redis.call('HINCRBY', KEYS[1], ARGV[1], 1)
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    return 0
+end
+return redis.call('PTTL', KEYS[1])
+```
 
-The main purpose of distributed locks is to prevent multiple clients from performing sensitive operations on a shared resource at the same time, thereby preventing data corruption, dirty reads, or other concurrency issues. These sensitive operations may include updating database records, performing some critical calculations, or other tasks that require mutual exclusion.
-
-### [Reentry RLock](./rlock_reentry.go)
-Redis reentrant lock is an implementation of distributed lock, which allows the same client to acquire the lock multiple times without being blocked by the lock it holds after acquiring the lock. This locking mechanism enables the same client to safely use distributed locks in multi-level nested calls or recursive functions without causing deadlocks or concurrency issues due to repeated lock acquisitions.
+### UnLockLua
+```lua
+if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0) then
+    -- not hold lock
+    return -1
+end
+local counter = redis.call('HINCRBY', KEYS[1], ARGV[1], -1)
+if (counter > 0) then
+    -- update expire
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    return 0
+else
+    -- release lock
+    redis.call('DEL', KEYS[1])
+    return 1
+end
+return -1
+```
