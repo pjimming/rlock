@@ -4,13 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/pjimming/rlock/common"
 	"github.com/pjimming/rlock/logx"
 	"github.com/pjimming/rlock/mistake"
+	"github.com/pjimming/rlock/utils"
 
 	"github.com/go-redis/redis/v8"
+)
+
+var (
+	once sync.Once
+	rc   *redis.Client
 )
 
 type RLock struct {
@@ -62,7 +69,7 @@ func NewRLock(op RedisClientOptions) (rLock *RLock) {
 
 	rLock = &RLock{
 		key:    "",
-		token:  generateToken(),
+		token:  utils.GenerateToken(),
 		client: rc,
 		lockOptions: lockOptions{
 			isReentry:          false,
@@ -78,21 +85,29 @@ func NewRLock(op RedisClientOptions) (rLock *RLock) {
 	return
 }
 
-func (l *RLock) Lock() (err error) {
-	if err = l.tryLock(); err == nil {
-		return nil
+func (l *RLock) Lock() bool {
+	err := l.tryLock()
+	if err == nil {
+		return true
 	}
 
+	// other error return false
 	if err != mistake.ErrLockAcquiredByOthers() {
 		l.logger.Errorf("lock fail, error: %v", err)
-		return err
+		return false
 	}
 
 	// span
-	if err = l.span(); err != nil {
-		return err
+	err = l.span()
+	if err == nil {
+		return true
 	}
-	return nil
+
+	// handle error
+	if err != mistake.ErrLockAcquiredByOthers() {
+		l.logger.Errorf("span lock fail, error: %v", err)
+	}
+	return false
 }
 
 func (l *RLock) TryLock() bool {
@@ -107,6 +122,9 @@ func (l *RLock) TryLock() bool {
 	return false
 }
 
+// tryLock try to acquire lock.
+// if err == nil means acquire lock success.
+// support reentry.
 func (l *RLock) tryLock() (err error) {
 	var res interface{}
 	if l.IsReentry() {

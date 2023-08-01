@@ -1,9 +1,11 @@
 package test
 
 import (
-	"github.com/pjimming/rlock"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/pjimming/rlock"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var op = rlock.RedisClientOptions{

@@ -1,23 +1,15 @@
-package rlock
+package utils
 
 import (
 	"fmt"
-	"github.com/go-redis/redis/v8"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-// common variable
-var (
-	once sync.Once
-	rc   *redis.Client
-)
-
-// generateToken 生成token
-func generateToken() string {
+// GenerateToken 生成token
+func GenerateToken() string {
 	return fmt.Sprintf("%s_%s", getCurrentProcessID(), getCurrentGoroutineID())
 }
 
