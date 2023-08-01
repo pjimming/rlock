@@ -9,7 +9,6 @@ import (
 
 	"github.com/pjimming/rlock/constants"
 	"github.com/pjimming/rlock/logx"
-	"github.com/pjimming/rlock/mistake"
 	"github.com/pjimming/rlock/utils"
 
 	"github.com/go-redis/redis/v8"
@@ -34,7 +33,11 @@ type RLock struct {
 	logger *logx.Logger
 }
 
-func NewRLock(op RedisClientOptions) (rLock *RLock) {
+func NewRLock(op RedisClientOptions, key string) (rLock *RLock) {
+	if key == "" {
+		key = utils.GenerateRandomString(10)
+	}
+
 	once.Do(func() {
 		rc = redis.NewClient(&redis.Options{
 			Addr:     op.Addr,
@@ -68,11 +71,10 @@ func NewRLock(op RedisClientOptions) (rLock *RLock) {
 	}
 
 	rLock = &RLock{
-		key:    "",
+		key:    key,
 		token:  utils.GenerateToken(),
 		client: rc,
 		lockOptions: lockOptions{
-			isReentry:          false,
 			blockWaitingSecond: 60,
 			expireSeconds:      30,
 			watchdogSwitch:     false,
@@ -85,70 +87,89 @@ func NewRLock(op RedisClientOptions) (rLock *RLock) {
 	return
 }
 
-func (l *RLock) Lock() bool {
-	err := l.tryLock()
-	if err == nil {
-		return true
+// Lock try to acquire lock, until acquire lock or blocking timeout. Returns:
+//
+// 1. ttl < 0 error;
+//
+// 2. ttl = 0 success;
+//
+// 3. ttl > 0 acquire by others
+func (l *RLock) Lock() int64 {
+	ttl, err := l.tryLock()
+	if err != nil {
+		return -1
 	}
 
-	// other error return false
-	if err != mistake.ErrLockAcquiredByOthers() {
-		l.logger.Errorf("lock fail, error: %v", err)
-		return false
+	if vv, ok := ttl.(int64); ok && vv == int64(0) {
+		return 0
 	}
 
 	// span
-	err = l.span()
-	if err == nil {
-		return true
+	ttl, err = l.span()
+	if err != nil {
+		return -1
 	}
-
-	// handle error
-	if err != mistake.ErrLockAcquiredByOthers() {
-		l.logger.Errorf("span lock fail, error: %v", err)
+	if vv, ok := ttl.(int64); ok {
+		return vv
 	}
-	return false
+	l.logger.Debug("Lock ttl interface trans int64 fail")
+	return -1
 }
 
-func (l *RLock) TryLock() bool {
-	err := l.tryLock()
-	if err == nil {
-		return true
+// TryLock try to acquire lock in once, support reentrant. Returns:
+//
+// 1. ttl < 0 error;
+//
+// 2. ttl = 0 success;
+//
+// 3. ttl > 0 acquire by others.
+func (l *RLock) TryLock() int64 {
+	ttl, err := l.tryLock()
+	if err != nil {
+		return -1
 	}
+	if vv, ok := ttl.(int64); ok {
+		return vv
+	}
+	l.logger.Debug("TryLock ttl interface trans int64 fail")
+	return -1
+}
 
-	if err != mistake.ErrLockAcquiredByOthers() {
-		l.logger.Errorf("TryLock error: %v", err)
+// UnLock try to release lock, support reentrant. Returns:
+//
+// 1. res < 0 error or release other's lock;
+//
+// 2. res = 0 release lock success, but still hold lock because of reentry;
+//
+// 3. res > 1 release lock success absolutely.
+func (l *RLock) UnLock() int64 {
+	res, err := l.releaseLock()
+	if err != nil {
+		return -1
 	}
-	return false
+	if vv, ok := res.(int64); ok {
+		return vv
+	}
+	l.logger.Debug("UnLock ttl interface trans int64 fail")
+	return -1
 }
 
 // tryLock try to acquire lock.
-// if err == nil means acquire lock success.
-// support reentry.
-func (l *RLock) tryLock() (err error) {
-	var res interface{}
-	if l.IsReentry() {
-		if res, err = l.client.
-			Eval(l.client.Context(), constants.ReentryLockLua, []string{l.key}, l.token, l.expireSeconds).
-			Result(); err != nil {
-			return err
-		}
-	} else {
-		// not reentry
-		if res, err = l.client.
-			Eval(l.client.Context(), constants.LockLua, []string{l.key}, l.token, l.expireSeconds).
-			Result(); err != nil {
-			return err
-		}
+// if ttl == 0 means acquire lock successfully.
+func (l *RLock) tryLock() (ttl interface{}, err error) {
+	if ttl, err = l.client.
+		Eval(l.client.Context(), constants.LockLua, []string{l.key}, l.token, l.expireSeconds).
+		Result(); err != nil {
+		l.logger.Errorf("try lock fail, error: %v", err)
+		return -1, err
 	}
-
-	if res != int64(1) {
-		err = mistake.ErrLockAcquiredByOthers()
-	}
-	return err
+	return
 }
 
-func (l *RLock) span() (err error) {
+// span try to acquire lock. If acquire unsuccessful,
+// will blocking poll to acquire lock until context timeout or blocking timeout.
+// Returns: ttl and error. If ttl == 0 means acquire lock successfully.
+func (l *RLock) span() (ttl interface{}, err error) {
 	timeoutCh := time.After(time.Duration(l.blockWaitingSecond) * time.Second)
 	ticker := time.NewTicker(time.Duration(50) * time.Millisecond)
 	defer ticker.Stop()
@@ -156,70 +177,86 @@ func (l *RLock) span() (err error) {
 	for range ticker.C {
 		select {
 		case <-l.client.Context().Done():
-			return fmt.Errorf("span fail, ctx timeout, error: %v", l.client.Context().Err())
+			return -1, fmt.Errorf("span fail, ctx timeout, error: %v", l.client.Context().Err())
 		case <-timeoutCh:
-			return mistake.ErrLockAcquiredByOthers()
+			return l.tryLock()
 		default:
 		}
 
-		if err = l.tryLock(); err == nil {
-			return nil
-		} else if err != mistake.ErrLockAcquiredByOthers() {
-			return err
+		ttl, err := l.tryLock()
+		if err != nil {
+			return -1, err
+		}
+
+		if vv, ok := ttl.(int64); ok && vv == int64(0) {
+			return ttl, nil
 		}
 	}
 
 	// will never reach
-	return nil
+	return -1, nil
+}
+
+func (l *RLock) releaseLock() (res interface{}, err error) {
+	if res, err = l.client.
+		Eval(l.client.Context(), constants.UnLockLua, []string{l.key}, l.token, l.expireSeconds).
+		Result(); err != nil {
+		l.logger.Errorf("release lock fail, error: %v", err)
+		return -1, err
+	}
+	return
 }
 
 func (l *RLock) Key() string {
 	return l.key
 }
 
-func (l *RLock) SetKey(key string) {
+func (l *RLock) SetKey(key string) *RLock {
+	if key == "" {
+		return l
+	}
 	l.key = key
+	return l
 }
 
 func (l *RLock) Token() string {
 	return l.token
 }
 
-func (l *RLock) SetToken(token string) {
+func (l *RLock) SetToken(token string) *RLock {
+	if token == "" {
+		return l
+	}
 	l.token = token
-}
-
-func (l *RLock) IsReentry() bool {
-	return l.isReentry
-}
-
-func (l *RLock) SetIsReentry(isReentry bool) {
-	l.isReentry = isReentry
+	return l
 }
 
 func (l *RLock) BlockWaitingSecond() int64 {
 	return l.blockWaitingSecond
 }
 
-func (l *RLock) SetBlockWaitingSecond(blockWaitingSecond int64) {
+func (l *RLock) SetBlockWaitingSecond(blockWaitingSecond int64) *RLock {
 	if blockWaitingSecond < 0 {
 		blockWaitingSecond = 1<<63 - 1
 	}
 	l.blockWaitingSecond = blockWaitingSecond
+	return l
 }
 
 func (l *RLock) ExpireSeconds() int64 {
 	return l.expireSeconds
 }
 
-func (l *RLock) SetExpireSeconds(expireSeconds int64) {
+func (l *RLock) SetExpireSeconds(expireSeconds int64) *RLock {
 	l.expireSeconds = expireSeconds
+	return l
 }
 
 func (l *RLock) WatchdogSwitch() bool {
 	return l.watchdogSwitch
 }
 
-func (l *RLock) SetWatchdogSwitch(watchdogSwitch bool) {
+func (l *RLock) SetWatchdogSwitch(watchdogSwitch bool) *RLock {
 	l.watchdogSwitch = watchdogSwitch
+	return l
 }

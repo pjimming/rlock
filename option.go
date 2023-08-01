@@ -8,7 +8,6 @@ type RedisClientOptions struct {
 }
 
 type lockOptions struct {
-	isReentry          bool
 	blockWaitingSecond int64
 	expireSeconds      int64
 	watchdogSwitch     bool
