@@ -30,6 +30,8 @@ func TestLock(t *testing.T) {
 
 	ttl := l.Lock()
 	ast.Equal(int64(0), ttl)
+
+	l.UnLock()
 }
 
 func TestTryLock(t *testing.T) {
@@ -41,12 +43,14 @@ func TestTryLock(t *testing.T) {
 	ttl := l.TryLock()
 	t.Log("ttl:", ttl)
 	ast.Equal(int64(0), ttl)
+
+	l.UnLock()
 }
 
 func TestLockTwice(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := rlock.NewRLock(op, "").SetWatchdogSwitch(true).SetExpireSeconds(3)
 	ast.NotNil(l)
 
 	t.Log(l.Key(), l.Token())
@@ -56,6 +60,11 @@ func TestLockTwice(t *testing.T) {
 
 	ttl2 := l.Lock()
 	ast.Equal(int64(0), ttl2)
+
+	ast.Equal(int64(0), l.UnLock())
+	ast.Equal(int64(1), l.UnLock())
+
+	time.Sleep(10 * time.Second)
 }
 
 func TestTryLockTwice(t *testing.T) {

@@ -28,13 +28,12 @@ func (l *RLock) watchdog() {
 }
 
 func (l *RLock) runWatchdog(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(l.expireSeconds/3) * time.Second)
+	ticker := time.NewTicker(time.Duration(l.expireSeconds*1000/3) * time.Millisecond)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		select {
 		case <-ctx.Done():
-			l.logger.Info("watchdog stop...")
 			return
 		default:
 		}

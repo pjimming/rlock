@@ -170,7 +170,7 @@ func (l *RLock) tryLock() (ttl interface{}, err error) {
 	}()
 
 	if ttl, err = l.client.
-		Eval(l.ctx, constants.LockLua, []string{l.key}, l.token, l.expireSeconds).
+		Eval(l.ctx, constants.LockLua, []string{l.key}, l.token, l.expireSeconds*1000).
 		Result(); err != nil {
 		l.logger.Errorf("try lock fail, error: %v", err)
 		return -1, err
@@ -226,7 +226,7 @@ func (l *RLock) releaseLock() (res interface{}, err error) {
 	}()
 
 	if res, err = l.client.
-		Eval(l.ctx, constants.UnLockLua, []string{l.key}, l.token, l.expireSeconds).
+		Eval(l.ctx, constants.UnLockLua, []string{l.key}, l.token, l.expireSeconds*1000).
 		Result(); err != nil {
 		l.logger.Errorf("release lock fail, error: %v", err)
 		return -1, err
@@ -237,7 +237,7 @@ func (l *RLock) releaseLock() (res interface{}, err error) {
 // delayExpire try to delay lock expire time.
 func (l *RLock) delayExpire() (res interface{}, err error) {
 	if res, err = l.client.
-		Eval(l.ctx, constants.DelayExpireLua, []string{l.key}, l.token, l.expireSeconds).
+		Eval(l.ctx, constants.DelayExpireLua, []string{l.key}, l.token, l.expireSeconds*1000).
 		Result(); err != nil {
 		l.logger.Errorf("delay expire fail, error: %v", err)
 		return -1, err
