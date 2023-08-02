@@ -22,6 +22,84 @@ go get -u github.com/pjimming/rlock
 - 高性能：Redis是一个内存数据库，具有很高的读写性能，可以实现快速的加锁和解锁操作。
 - 原子性：Redis分布式锁的加锁和解锁操作使用原子命令，可以保证操作的原子性，避免并发下的竞争问题。
 
+## 快速开始
+```go
+package test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/pjimming/rlock"
+	"github.com/pjimming/rlock/utils"
+
+	"github.com/stretchr/testify/assert"
+)
+
+var op = rlock.RedisClientOptions{
+	Addr:     "127.0.0.1:6379",
+	Password: "",
+}
+
+func TestLock(t *testing.T) {
+	ast := assert.New(t)
+
+	l := rlock.NewRLock(op, "")
+	ast.NotNil(l)
+
+	ttl := l.Lock()
+	ast.Equal(int64(0), ttl)
+
+	l.UnLock()
+}
+
+func TestTryLock(t *testing.T) {
+	ast := assert.New(t)
+
+	l := rlock.NewRLock(op, "")
+	ast.NotNil(l)
+
+	ttl := l.TryLock()
+	t.Log("ttl:", ttl)
+	ast.Equal(int64(0), ttl)
+
+	l.UnLock()
+}
+
+func TestDelayExpire(t *testing.T) {
+	ast := assert.New(t)
+	key := utils.GenerateRandomString(8)
+
+	l1 := rlock.NewRLock(op, key).
+		SetToken(key + "111").
+		SetExpireSeconds(5).
+		SetWatchdogSwitch(true)
+
+	l2 := rlock.NewRLock(op, key).
+		SetToken(key + "222").
+		SetBlockWaitingSecond(20)
+
+	t.Log("l1:", l1.Key(), l1.Token())
+	t.Log("l2:", l2.Key(), l2.Token())
+
+	l1.Lock()
+
+	start := time.Now()
+	l2.TryLock()
+	t.Log("l2 TryLock cost:", time.Now().Sub(start).String())
+
+	t.Log("l1 start sleep...", time.Now().Sub(start).String())
+	time.Sleep(time.Second * 10)
+	ast.Equal(int64(1), l1.UnLock())
+	t.Log("l1 unlock", time.Now().Sub(start).String())
+
+	l2.Lock()
+	t.Log("l2 Lock cost:", time.Now().Sub(start).String())
+
+	ast.Equal(int64(1), l2.UnLock())
+}
+```
+
 ## Lua 脚本
 > Hint: Your redis should support lua script.
 
@@ -30,13 +108,13 @@ go get -u github.com/pjimming/rlock
 if (redis.call('EXISTS', KEYS[1]) == 0) then
     -- 锁未被占有
     redis.call('HINCRBY', KEYS[1], ARGV[1], 1)
-    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
     return 0
 end
 if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1) then
     -- 可重入
     redis.call('HINCRBY', KEYS[1], ARGV[1], 1)
-    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
     return 0
 end
 return redis.call('PTTL', KEYS[1])
@@ -51,7 +129,7 @@ end
 local counter = redis.call('HINCRBY', KEYS[1], ARGV[1], -1)
 if (counter > 0) then
     -- 更新过期时间
-    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+    redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
     return 0
 else
     -- 释放锁
