@@ -1,6 +1,6 @@
 # RLock
 
-Golang实现的基于redis的分布式锁。
+由Golang实现的基于Redis的分布式锁。
 
 - [English](./README.md)
 

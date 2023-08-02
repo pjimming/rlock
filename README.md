@@ -1,6 +1,6 @@
 # RLock
 
-A distributed lock base on redis achieved by Golang.
+A distributed lock base on Redis achieved by Golang.
 
 - [简体中文](./README_ZH.md)
 
