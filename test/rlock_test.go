@@ -133,7 +133,46 @@ func TestBlocking(t *testing.T) {
 	start := time.Now()
 	ast.Less(int64(0), l2.TryLock())
 	t.Log("l2 TryLock cost:", time.Now().Sub(start).String())
+
+	t.Log("l1 start sleep...", time.Now().Sub(start).String())
+	time.Sleep(time.Second * 4)
+	ast.Equal(int64(1), l1.UnLock())
+	t.Log("l1 unlock", time.Now().Sub(start).String())
+
 	ast.Equal(int64(0), l2.Lock())
+	t.Log("l2 Lock cost:", time.Now().Sub(start).String())
+
+	ast.Equal(int64(1), l2.UnLock())
+}
+
+func TestDelayExpire(t *testing.T) {
+	ast := assert.New(t)
+	key := utils.GenerateRandomString(8)
+
+	l1 := rlock.NewRLock(op, key).
+		SetToken(key + "111").
+		SetExpireSeconds(5).
+		SetWatchdogSwitch(true)
+
+	l2 := rlock.NewRLock(op, key).
+		SetToken(key + "222").
+		SetBlockWaitingSecond(20)
+
+	t.Log("l1:", l1.Key(), l1.Token())
+	t.Log("l2:", l2.Key(), l2.Token())
+
+	l1.Lock()
+
+	start := time.Now()
+	l2.TryLock()
+	t.Log("l2 TryLock cost:", time.Now().Sub(start).String())
+
+	t.Log("l1 start sleep...", time.Now().Sub(start).String())
+	time.Sleep(time.Second * 10)
+	ast.Equal(int64(1), l1.UnLock())
+	t.Log("l1 unlock", time.Now().Sub(start).String())
+
+	l2.Lock()
 	t.Log("l2 Lock cost:", time.Now().Sub(start).String())
 
 	ast.Equal(int64(1), l2.UnLock())
