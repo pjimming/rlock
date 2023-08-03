@@ -138,3 +138,12 @@ else
 end
 return -1
 ```
+
+### 续命
+```lua
+if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1) then
+    redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
+    return 1
+end
+return 0
+```
