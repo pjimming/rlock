@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// watchdog new a watchdog to delay redis lock's expire time.
 func (l *RLock) watchdog() {
 	// if watchdog switch off
 	if !l.WatchdogSwitch() {
@@ -16,7 +17,7 @@ func (l *RLock) watchdog() {
 	for !atomic.CompareAndSwapInt32(&l.runningDog, 0, 1) {
 	}
 
-	// run watchdog
+	// run watchdog, set stopDog func
 	var ctx context.Context
 	ctx, l.stopDog = context.WithCancel(l.ctx)
 	go func() {
@@ -27,8 +28,9 @@ func (l *RLock) watchdog() {
 	}()
 }
 
+// runWatchdog start to expire redis lock.
 func (l *RLock) runWatchdog(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(l.expireSeconds*1000/3) * time.Millisecond)
+	ticker := time.NewTicker(l.expireTime / 3)
 	defer ticker.Stop()
 
 	for range ticker.C {

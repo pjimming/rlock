@@ -50,7 +50,7 @@ func TestTryLock(t *testing.T) {
 func TestLockTwice(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "").SetWatchdogSwitch(true).SetExpireSeconds(3)
+	l := rlock.NewRLock(op, "").SetWatchdogSwitch(true).SetExpireTime(3 * time.Second)
 	ast.NotNil(l)
 
 	t.Log(l.Key(), l.Token())
@@ -131,8 +131,13 @@ func TestBlocking(t *testing.T) {
 	ast := assert.New(t)
 	key := utils.GenerateRandomString(8)
 
-	l1 := rlock.NewRLock(op, key).SetToken(key + "111").SetExpireSeconds(5)
-	l2 := rlock.NewRLock(op, key).SetToken(key + "222").SetBlockWaitingSecond(20)
+	l1 := rlock.NewRLock(op, key).
+		SetToken(key + "111").
+		SetExpireTime(5 * time.Second)
+
+	l2 := rlock.NewRLock(op, key).
+		SetToken(key + "222").
+		SetBlockWaitingSecond(20 * time.Second)
 
 	t.Log("l1:", l1.Key(), l1.Token())
 	t.Log("l2:", l2.Key(), l2.Token())
@@ -160,12 +165,12 @@ func TestDelayExpire(t *testing.T) {
 
 	l1 := rlock.NewRLock(op, key).
 		SetToken(key + "111").
-		SetExpireSeconds(5).
+		SetExpireTime(5 * time.Second).
 		SetWatchdogSwitch(true)
 
 	l2 := rlock.NewRLock(op, key).
 		SetToken(key + "222").
-		SetBlockWaitingSecond(20)
+		SetBlockWaitingSecond(20 * time.Second)
 
 	t.Log("l1:", l1.Key(), l1.Token())
 	t.Log("l2:", l2.Key(), l2.Token())
@@ -185,4 +190,22 @@ func TestDelayExpire(t *testing.T) {
 	t.Log("l2 Lock cost:", time.Now().Sub(start).String())
 
 	ast.Equal(int64(1), l2.UnLock())
+}
+
+func TestRedLock(t *testing.T) {
+	redLock, err := rlock.NewRedLock([]rlock.RedisClientOptions{
+		{Addr: "127.0.0.1:7001", Password: ""},
+		{Addr: "127.0.0.1:7002", Password: ""},
+		{Addr: "127.0.0.1:7003", Password: ""},
+		{Addr: "127.0.0.1:7004", Password: ""},
+		{Addr: "127.0.0.1:7005", Password: ""},
+	}, "1234567_key", 30*time.Second)
+
+	if err != nil {
+		t.Log(err)
+		return
+	}
+
+	t.Log(redLock.TryLock())
+	redLock.UnLock()
 }

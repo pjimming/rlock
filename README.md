@@ -21,8 +21,11 @@ go get -u github.com/pjimming/rlock
 - Reentrancy: Redis distributed locks can support the same client to acquire the same lock multiple times, avoiding deadlocks in nested calls.
 - High performance: Redis is an in-memory database with high read and write performance, enabling fast locking and unlocking operations.
 - Atomicity: The locking and unlocking operations of Redis distributed locks use atomic commands, which can ensure the atomicity of operations and avoid competition problems under concurrency.
+- RedLock: In the implementation of RedLock, the contradiction between Consistency C and Availability A in CAP will be eased based on the majority principle, ensuring that when more than half of all Redis nodes under RedLock are available, the entire RedLock can be provided normally Serve.
 
 ## Quick Start
+
+### RLock
 ```go
 package test
 
@@ -100,6 +103,38 @@ func TestDelayExpire(t *testing.T) {
 }
 ```
 
+### RedLock
+```go
+package test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/pjimming/rlock"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestRedLock(t *testing.T) {
+	redLock, err := rlock.NewRedLock([]rlock.RedisClientOptions{
+		{Addr: "127.0.0.1:7001", Password: ""},
+		{Addr: "127.0.0.1:7002", Password: ""},
+		{Addr: "127.0.0.1:7003", Password: ""},
+		{Addr: "127.0.0.1:7004", Password: ""},
+		{Addr: "127.0.0.1:7005", Password: ""},
+	}, "1234567_key", 30*time.Second)
+
+	if err != nil {
+		t.Log(err)
+		return
+	}
+
+	t.Log(redLock.TryLock())
+	redLock.UnLock()
+}
+```
+
 ## Lua Scripts
 > Hint: Your redis should support lua script.
 
@@ -142,6 +177,7 @@ return -1
 ### DelayExpireLua
 ```lua
 if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1) then
+    -- hold lock
     redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
     return 1
 end

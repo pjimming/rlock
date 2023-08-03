@@ -15,14 +15,17 @@ go get -u github.com/pjimming/rlock
 ```
 
 ## 实现功能
-- 互斥性：Redis分布式锁可以保证同一时刻只有一个客户端可以获得锁，实现线程之间的互斥。
-- 安全性：Redis分布式锁采用原子操作，可以保证并发情况下锁的安全性，避免数据竞争、死锁等问题。
-- 锁超时：为了避免某个客户端获取锁后失败而导致死锁，Redis分布式锁可以设置锁超时时间，超过超时时间会自动释放锁。
-- 可重入性：Redis分布式锁可以支持同一个客户端多次获取同一个锁，避免嵌套调用时出现死锁。
-- 高性能：Redis是一个内存数据库，具有很高的读写性能，可以实现快速的加锁和解锁操作。
-- 原子性：Redis分布式锁的加锁和解锁操作使用原子命令，可以保证操作的原子性，避免并发下的竞争问题。
+- 互斥性：Redis 分布式锁可以保证同一时刻只有一个客户端可以获得锁，实现线程之间的互斥。
+- 安全性：Redis 分布式锁采用原子操作，可以保证并发情况下锁的安全性，避免数据竞争、死锁等问题。
+- 锁超时：为了避免某个客户端获取锁后失败而导致死锁，Redis 分布式锁可以设置锁超时时间，超过超时时间会自动释放锁。
+- 可重入性：Redis 分布式锁可以支持同一个客户端多次获取同一个锁，避免嵌套调用时出现死锁。
+- 高性能：Redis 是一个内存数据库，具有很高的读写性能，可以实现快速的加锁和解锁操作。
+- 原子性：Redis 分布式锁的加锁和解锁操作使用原子命令，可以保证操作的原子性，避免并发下的竞争问题。
+- 红锁：在红锁 RedLock 实现中，会基于多数派准则进行 CAP 中一致性 C 和可用性 A 之间矛盾的缓和，保证在 RedLock 下所有 Redis 节点中达到半数以上节点可用时，整个红锁就能够正常提供服务。
 
 ## 快速开始
+
+### RLock
 ```go
 package test
 
@@ -100,6 +103,38 @@ func TestDelayExpire(t *testing.T) {
 }
 ```
 
+### 红锁
+```go
+package test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/pjimming/rlock"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestRedLock(t *testing.T) {
+	redLock, err := rlock.NewRedLock([]rlock.RedisClientOptions{
+		{Addr: "127.0.0.1:7001", Password: ""},
+		{Addr: "127.0.0.1:7002", Password: ""},
+		{Addr: "127.0.0.1:7003", Password: ""},
+		{Addr: "127.0.0.1:7004", Password: ""},
+		{Addr: "127.0.0.1:7005", Password: ""},
+	}, "1234567_key", 30*time.Second)
+
+	if err != nil {
+		t.Log(err)
+		return
+	}
+
+	t.Log(redLock.TryLock())
+	redLock.UnLock()
+}
+```
+
 ## Lua 脚本
 > Hint: Your redis should support lua script.
 
@@ -139,9 +174,10 @@ end
 return -1
 ```
 
-### 续命
+### 续租
 ```lua
 if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1) then
+    -- 持有锁
     redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
     return 1
 end

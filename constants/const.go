@@ -1,5 +1,16 @@
 package constants
 
+import "time"
+
+const (
+	// DefaultBlockWaitingTime default block wait time to acquire lock
+	DefaultBlockWaitingTime = 60 * time.Second
+	// DefaultExpireTime default redis key expire time
+	DefaultExpireTime = 30 * time.Second
+	// DefaultWatchdogSwitch watchdog switch default false
+	DefaultWatchdogSwitch = false
+)
+
 // Lua Scripts.
 // We use lua scripts for redis to ensure atomicity.
 const (
@@ -39,6 +50,7 @@ return -1
 
 	DelayExpireLua = `
 if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1) then
+	-- hold lock
     redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]))
     return 1
 end
