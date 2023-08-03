@@ -183,3 +183,7 @@ if (redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1) then
 end
 return 0
 ```
+
+## Reference
+- [Redis分布式锁实现Redisson 15问](https://ost.51cto.com/posts/14471)
+- [https://github.com/redisson/redisson](https://github.com/redisson/redisson)
