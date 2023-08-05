@@ -7,10 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pjimming/rlock/constants"
-	"github.com/pjimming/rlock/logx"
-	"github.com/pjimming/rlock/utils"
-
 	"github.com/go-redis/redis/v8"
 )
 
@@ -23,13 +19,13 @@ type RLock struct {
 	key    string        // lock key
 	token  string        // lock token, to authority validate
 	client *redis.Client // redis client pool
-	lockOptions
+	LockOptions
 
 	runningDog int32              // watchdog running status
 	stopDog    context.CancelFunc // stop watchdog
 
 	ctx    context.Context // rlock context
-	logger *logx.Logger    // log
+	logger *logx           // log
 }
 
 // NewRLock new a redis lock.
@@ -40,9 +36,10 @@ type RLock struct {
 //	blockWaitingTime : 60 * time.Second
 //	expireTime       : 30 * time.Second
 //	watchdogSwitch   : false
-func NewRLock(op RedisClientOptions, key string) (rLock *RLock) {
+func NewRLock(op RedisClientOptions, key string, opts ...LockOption) (rLock *RLock) {
 	if key == "" {
-		key = utils.GenerateRandomString(10)
+		log.Println("key should not be empty")
+		return nil
 	}
 
 	once.Do(func() {
@@ -79,17 +76,21 @@ func NewRLock(op RedisClientOptions, key string) (rLock *RLock) {
 
 	rLock = &RLock{
 		key:    key,
-		token:  utils.GenerateToken(),
+		token:  generateToken(),
 		client: rc,
-		lockOptions: lockOptions{
-			blockWaitingTime: constants.DefaultBlockWaitingTime,
-			expireTime:       constants.DefaultExpireTime,
-			watchdogSwitch:   constants.DefaultWatchdogSwitch,
+		LockOptions: LockOptions{
+			blockWaitingTime: defaultBlockWaitingTime,
+			expireTime:       defaultExpireTime,
+			watchdogSwitch:   defaultWatchdogSwitch,
 		},
 		runningDog: 0,
 		stopDog:    nil,
 		ctx:        context.Background(),
-		logger:     logx.NewLogger(),
+		logger:     newLogger(),
+	}
+
+	for _, opt := range opts {
+		opt(&rLock.LockOptions)
 	}
 
 	return
@@ -176,7 +177,7 @@ func (l *RLock) tryLock() (ttl interface{}, err error) {
 	}()
 
 	if ttl, err = l.client.
-		Eval(l.ctx, constants.LockLua, []string{l.key}, l.token, l.expireTime/time.Millisecond).
+		Eval(l.ctx, lockLua, []string{l.key}, l.token, l.expireTime/time.Millisecond).
 		Result(); err != nil {
 		l.logger.Errorf("try lock fail, error: %v", err)
 		return -1, err
@@ -232,7 +233,7 @@ func (l *RLock) releaseLock() (res interface{}, err error) {
 	}()
 
 	if res, err = l.client.
-		Eval(l.ctx, constants.UnLockLua, []string{l.key}, l.token, l.expireTime/time.Millisecond).
+		Eval(l.ctx, unLockLua, []string{l.key}, l.token, l.expireTime/time.Millisecond).
 		Result(); err != nil {
 		l.logger.Errorf("release lock fail, error: %v", err)
 		return -1, err
@@ -243,7 +244,7 @@ func (l *RLock) releaseLock() (res interface{}, err error) {
 // delayExpire try to delay lock expire time.
 func (l *RLock) delayExpire() (res interface{}, err error) {
 	if res, err = l.client.
-		Eval(l.ctx, constants.DelayExpireLua, []string{l.key}, l.token, l.expireTime/time.Millisecond).
+		Eval(l.ctx, delayExpireLua, []string{l.key}, l.token, l.expireTime/time.Millisecond).
 		Result(); err != nil {
 		l.logger.Errorf("delay expire fail, error: %v", err)
 		return -1, err

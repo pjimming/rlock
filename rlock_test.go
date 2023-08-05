@@ -1,16 +1,13 @@
-package test
+package rlock
 
 import (
 	"testing"
 	"time"
 
-	"github.com/pjimming/rlock"
-	"github.com/pjimming/rlock/utils"
-
 	"github.com/stretchr/testify/assert"
 )
 
-var op = rlock.RedisClientOptions{
+var op = RedisClientOptions{
 	Addr:     "127.0.0.1:6379",
 	Password: "",
 }
@@ -18,14 +15,14 @@ var op = rlock.RedisClientOptions{
 func TestNewRLock(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := NewRLock(op, "")
 	ast.NotNil(l)
 }
 
 func TestLock(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := NewRLock(op, "")
 	ast.NotNil(l)
 
 	ttl := l.Lock()
@@ -37,7 +34,7 @@ func TestLock(t *testing.T) {
 func TestTryLock(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := NewRLock(op, "")
 	ast.NotNil(l)
 
 	ttl := l.TryLock()
@@ -50,7 +47,7 @@ func TestTryLock(t *testing.T) {
 func TestLockTwice(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "").SetWatchdogSwitch(true).SetExpireTime(3 * time.Second)
+	l := NewRLock(op, "").SetWatchdogSwitch(true).SetExpireTime(3 * time.Second)
 	ast.NotNil(l)
 
 	t.Log(l.Key(), l.Token())
@@ -70,7 +67,7 @@ func TestLockTwice(t *testing.T) {
 func TestTryLockTwice(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := NewRLock(op, "")
 	ast.NotNil(l)
 
 	t.Log(l.Key(), l.Token())
@@ -85,7 +82,7 @@ func TestTryLockTwice(t *testing.T) {
 func TestLockAndUnLock(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := NewRLock(op, "")
 	ast.NotNil(l)
 
 	t.Log(l.Key(), l.Token())
@@ -100,7 +97,7 @@ func TestLockAndUnLock(t *testing.T) {
 func TestTryLockAndUnLock(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := NewRLock(op, "")
 	ast.NotNil(l)
 
 	t.Log(l.Key(), l.Token())
@@ -115,7 +112,7 @@ func TestTryLockAndUnLock(t *testing.T) {
 func TestReentry(t *testing.T) {
 	ast := assert.New(t)
 
-	l := rlock.NewRLock(op, "")
+	l := NewRLock(op, "")
 	ast.NotNil(l)
 
 	t.Log(l.Key(), l.Token())
@@ -129,13 +126,13 @@ func TestReentry(t *testing.T) {
 
 func TestBlocking(t *testing.T) {
 	ast := assert.New(t)
-	key := utils.GenerateRandomString(8)
+	key := "22229999"
 
-	l1 := rlock.NewRLock(op, key).
+	l1 := NewRLock(op, key).
 		SetToken(key + "111").
 		SetExpireTime(5 * time.Second)
 
-	l2 := rlock.NewRLock(op, key).
+	l2 := NewRLock(op, key).
 		SetToken(key + "222").
 		SetBlockWaitingSecond(20 * time.Second)
 
@@ -161,14 +158,14 @@ func TestBlocking(t *testing.T) {
 
 func TestDelayExpire(t *testing.T) {
 	ast := assert.New(t)
-	key := utils.GenerateRandomString(8)
+	key := "22229999000"
 
-	l1 := rlock.NewRLock(op, key).
+	l1 := NewRLock(op, key).
 		SetToken(key + "111").
 		SetExpireTime(5 * time.Second).
 		SetWatchdogSwitch(true)
 
-	l2 := rlock.NewRLock(op, key).
+	l2 := NewRLock(op, key).
 		SetToken(key + "222").
 		SetBlockWaitingSecond(20 * time.Second)
 
@@ -193,7 +190,7 @@ func TestDelayExpire(t *testing.T) {
 }
 
 func TestRedLock(t *testing.T) {
-	redLock, err := rlock.NewRedLock([]rlock.RedisClientOptions{
+	redLock, err := NewRedLock([]RedisClientOptions{
 		{Addr: "127.0.0.1:7001", Password: ""},
 		{Addr: "127.0.0.1:7002", Password: ""},
 		{Addr: "127.0.0.1:7003", Password: ""},

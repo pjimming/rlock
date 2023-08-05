@@ -3,25 +3,23 @@ package rlock
 import (
 	"errors"
 	"time"
-
-	"github.com/pjimming/rlock/utils"
 )
 
 type RedLock struct {
-	locks []*RLock
-	redLockOptions
+	locks                 []*RLock
+	maxSingleNodeWaitTime time.Duration // max try lock wait time.
 }
 
 // NewRedLock new a RedLock from multi redis servers.
 //
 // It is required that the cumulative timeout threshold of all nodes is
 // less than one-tenth of the distributed lock expiration time.
-func NewRedLock(ops []RedisClientOptions, key string, expireTime time.Duration) (redLock *RedLock, err error) {
+func NewRedLock(rcs []RedisClientOptions, key string, expireTime time.Duration) (redLock *RedLock, err error) {
 	if key == "" {
-		key = utils.GenerateRandomString(10)
+		key = generateRandomString(10)
 	}
 
-	for _, op := range ops {
+	for _, op := range rcs {
 		rlock := NewRLock(op, key)
 
 		if rlock != nil {
