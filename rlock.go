@@ -38,8 +38,7 @@ type RLock struct {
 //	watchdogSwitch   : false
 func NewRLock(op RedisClientOptions, key string, opts ...LockOption) (rLock *RLock) {
 	if key == "" {
-		log.Println("key should not be empty")
-		return nil
+		key = generateRandomString(10)
 	}
 
 	once.Do(func() {
