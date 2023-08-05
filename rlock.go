@@ -24,7 +24,7 @@ type RLock struct {
 	runningDog int32              // watchdog running status
 	stopDog    context.CancelFunc // stop watchdog
 
-	ctx    context.Context // rlock context
+	ctx    context.Context // context
 	logger *logx           // log
 }
 
